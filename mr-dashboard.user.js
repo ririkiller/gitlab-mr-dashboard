@@ -5,7 +5,7 @@
 // @supportURL   https://github.com/ririkiller/gitlab-mr-dashboard/issues
 // @downloadURL  https://raw.githubusercontent.com/ririkiller/gitlab-mr-dashboard/main/mr-dashboard.user.js
 // @updateURL    https://raw.githubusercontent.com/ririkiller/gitlab-mr-dashboard/main/mr-dashboard.user.js
-// @version      1.0.0
+// @version      1.0.1
 // @description  Replaces a GitLab project's open merge request list with a dashboard (statuses, reviews, demos, releases), with a switch back to GitLab's own list. English or French, as GitLab. Read only. Project conventions live in settings (⚙).
 // @match        https://gitlab.com/*/-/merge_requests*
 // @grant        none
@@ -105,7 +105,7 @@
       tableTitle: 'Merge requests ouvertes', search: 'Chercher un titre, un auteur, un ticket…', searchLabel: 'Chercher une MR',
       empty: 'Aucune MR dans cette vue.',
       cols: ['MR', 'Titre', 'Auteur', 'Statut', 'CI', 'Reviewers', 'Démo', 'Inactif'],
-      draft: 'Brouillon', reviewPending: 'Review en attente', myMr: 'Ma MR', changed: 'Activité depuis ta vue',
+      approvedTip: 'A approuvé', draft: 'Brouillon', reviewPending: 'Review en attente', myMr: 'Ma MR', changed: 'Activité depuis ta vue',
       eyeMark: 'Marquer comme vue', eyeUnmark: 'Retirer la marque « vue »', eyeChanged: 'Activité depuis ta vue : marquer à nouveau comme vue',
       conflicts: 'Ne peut pas être mergée automatiquement',
       openCi: 'Ouvrir la CI', openCiLabel: (i) => `Ouvrir le pipeline de !${i}`,
@@ -141,7 +141,7 @@
       tableTitle: 'Open merge requests', search: 'Search a title, an author, a ticket…', searchLabel: 'Search an MR',
       empty: 'No MR in this view.',
       cols: ['MR', 'Title', 'Author', 'Status', 'CI', 'Reviewers', 'Demo', 'Idle'],
-      draft: 'Draft', reviewPending: 'Review pending', myMr: 'My MR', changed: 'Activity since you saw it',
+      approvedTip: 'Approved', draft: 'Draft', reviewPending: 'Review pending', myMr: 'My MR', changed: 'Activity since you saw it',
       eyeMark: 'Mark as seen', eyeUnmark: 'Remove the “seen” mark', eyeChanged: 'Activity since you saw it: mark as seen again',
       conflicts: 'Cannot be merged automatically',
       openCi: 'Open the CI', openCiLabel: (i) => `Open the pipeline of !${i}`,
@@ -408,6 +408,7 @@
     .pipe { white-space: nowrap; }
     .ci { white-space: nowrap; }
     .reviewers { display: flex; align-items: baseline; gap: 2px; }
+    .approved-g { color: var(--jv-ok); font-weight: 700; margin-right: 2px; }
     .icon-btn { background: none; border: 1px solid transparent; border-radius: 4px; padding: 0 3px; margin-right: 2px;
       font-size: 13px; line-height: 1.3; color: var(--jv-muted); cursor: pointer; }
     .icon-btn:hover, .icon-btn:focus-visible { border-color: var(--jv-line); color: var(--jv-fg); outline: none; }
@@ -601,6 +602,20 @@
       const [g, tone] = PIPELINE_GLYPHS[m.pipeline] || ['•', 'muted'];
       return el('span', { class: 'pipe' }, el('span', { class: `pipe-g ${tone}`, text: g }), T.pipeline[m.pipeline] || m.pipeline);
     };
+    // Reviewers, each with ✓ once they approved; someone who approved without
+    // being a reviewer is listed too.
+    const reviewerList = (m) => {
+      const people = [...m.reviewers, ...m.approvedBy.filter((a) => !m.reviewers.includes(a))];
+      if (!people.length) return el('span', { class: 'muted', text: '—' });
+      return el('span', { class: 'people' }, ...people.flatMap((person, i) => {
+        const approved = m.approvedBy.includes(person);
+        return [
+          i > 0 && ', ',
+          el('span', { class: approved ? 'approved' : '', title: approved ? T.approvedTip : '' },
+            approved && el('span', { class: 'approved-g', text: '✓' }), person),
+        ];
+      }));
+    };
     const statusPill = (m) => {
       const group = m.release ? 'release' : m.ready ? 'merge' : m.group;
       return el('span', { class: 'pill', dataset: { group }, text: m.release ? T[m.release] : T[group] });
@@ -631,7 +646,7 @@
         pipeStatus(m)),
       el('td', {}, el('div', { class: 'reviewers' },
         el('button', { class: 'icon-btn', type: 'button', 'data-tip': T.copy, 'aria-label': T.copyLabel(m.iid), onclick: reviewClaude(m), text: '⧉' }),
-        el('span', { class: m.reviewers.length ? '' : 'muted', text: m.reviewers.join(', ') || '—' }))),
+        reviewerList(m))),
       // The demo column only exists where the project's settings name demo environments.
       withDemo && el('td', { class: 'demo' + (m.demoUrl ? '' : ' muted') }, m.demoUrl ? safeLink(m.demoUrl, T.openDemo) : '—'),
       el('td', { class: 'idle' + (m.idleDays > STALE_DAYS ? ' stale' : ''), title: T.lastActivity(new Date(m.updatedAt).toLocaleString(LANG)), text: shortAge(m.updatedAt, now) }));
